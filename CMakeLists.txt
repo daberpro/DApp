@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.27.2)
 project(Main VERSION 1.0.0)
 
-add_executable(${PROJECT_NAME} Main.cpp Headers/fileReader.h Headers/Shader.h)
+file(GLOB ImGui "Headers/*.cpp")
+add_executable(${PROJECT_NAME} Main.cpp ${ImGui})
 message("Check Dependencies")
 
 set(CMAKE_CXX_STANDARD 20)
@@ -21,5 +22,5 @@ if(OpenGL_FOUND)
     message("FOUND OpenGL VERSION ${${OpenGL}_VERSION}")
 endif()
 
-target_link_directories(${PROJECT_NAME} PUBLIC ${OpenGL_INCLUDE_DIR})
-target_link_libraries(${PROJECT_NAME} glfw GLEW::GLEW ${OPENGL_LIBRARY})
+target_link_directories(${PROJECT_NAME} PUBLIC ${OpenGL_INCLUDE_DIR} "Headers\\")
+target_link_libraries(${PROJECT_NAME} glfw GLEW::GLEW ${OPENGL_LIBRARY} user32 gdi32 Dwmapi)
