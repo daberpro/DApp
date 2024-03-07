@@ -5,7 +5,7 @@ file(GLOB ImGui "Headers/*.cpp")
 add_executable(${PROJECT_NAME} Main.cpp ${ImGui})
 message("Check Dependencies")
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_FLAGS --static)
 set(CMAKE_CXX_FLAGS -static-libstdc++)
 set(all_dependencies glfw3 GLEW)
