@@ -1,18 +1,4 @@
-#pragma once
-#include <iostream>
-#include <GL/glew.h>
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3.h>
-#include "FileReader.h"
-#include "Shader.h"
-#include <GLFW/glfw3native.h>
-#include <Windows.h>
-#include <windowsx.h>
-#include <functional>
-#include "Texture.h"
+#include "all-header.h"
 
 unsigned char ExitIcon[231] = {
 	0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
@@ -247,11 +233,12 @@ static LRESULT CALLBACK WindowProcedure(HWND Window, UINT Message, WPARAM wParam
     return ::CallWindowProc((WNDPROC)prevProc, Window, Message, wParam, lParam);
 }
 
+
 class DApp
 {
 public:
     virtual void OnSetup(ImGuiIO& io){};
-    virtual void RenderContent(){};
+    virtual void RenderContent(ImGuiIO& io){};
     virtual ~DApp(){};
     DApp(){};
     DApp(const DApp &app) = delete;
@@ -262,7 +249,11 @@ public:
     double height = 0;
     double fontSize = 0;
     bool customTitleBar = false;
+    bool showDemoWindow = false;
     const char* title = nullptr;
+    GLFWwindow* window;
+    ImFont* PoppinsFontText;
+    ImFont* MaterialDesignFontIcon;
 
 private:
 
@@ -271,8 +262,7 @@ private:
     bool isHovered = false, isDrag = false;
     std::function<void()> titleBarUtility[3]{};
 
-    void disableTitlebar(GLFWwindow *window)
-    {
+    void disableTitlebar(GLFWwindow *window){
         HWND MainWindow = glfwGetWin32Window(window);
         DWORD Style = GetWindowLongPtr(MainWindow, GWL_STYLE);
         Style &=
@@ -292,6 +282,7 @@ private:
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, this->padding);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
         if (ImGui::BeginMainMenuBar())
         {
 
@@ -331,6 +322,7 @@ private:
                 )){
                     menuBarHandler[i]();
                 };
+                
                 if (i < 2)
                     ImGui::SameLine();
             }
@@ -338,7 +330,61 @@ private:
             ImGui::PopStyleColor(3);
             ImGui::Columns(1);
             ImGui::EndMainMenuBar();
-            ImGui::PopStyleVar(3);
+            ImGui::PopStyleVar(4);
+        }
+    };
+
+    void DrawTitleBar(std::string* menuBarIcon,std::function<void()>* menuBarHandler){
+        this->padding = ImVec2(0.0f, 15.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, this->padding);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
+        if (ImGui::BeginMainMenuBar())
+        {
+
+            this->min = ImGui::GetItemRectMin();
+            this->max = ImGui::GetItemRectMax();
+            this->fontSize = ImGui::GetFontSize();
+            this->size = ImGui::GetItemRectSize();
+            float MenuHeight = this->max.y + fontSize + 2 * this->padding.y;
+            this->titleBarHeight = MenuHeight - min.y;
+
+            ImGui::Columns(2, "title-bar-columns", true);
+            ImGui::SetColumnWidth(0, (this->max.x - this->min.x) - 150);
+            ImGui::InvisibleButton("",ImVec2((this->max.x - this->min.x) - 150, this->titleBarHeight));
+            isCaptionMoved = ImGui::IsItemHovered();
+            
+            ImGui::SetCursorPos({
+                (float)ImGui::GetColumnWidth(0)/2 - (float)(ImGui::CalcTextSize(this->title).x * 0.5),
+                0
+            });
+            ImGui::Text(this->title);
+            ImGui::NextColumn();
+            
+            ImGui::SetColumnWidth(1, 150);
+            ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(1.0f, 1.0f, 1.0f, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(1.0f, 1.0f, 1.0f, 0.3f));
+            
+            for (int i = 0; i < 3; i++)
+            { 
+                ImGui::PushFont(this->MaterialDesignFontIcon);
+                if(ImGui::Button(
+                    menuBarIcon[i].c_str(),
+                    ImVec2(50.0f,this->titleBarHeight)// size
+                )){
+                    menuBarHandler[i]();
+                };
+                if (i < 2)
+                    ImGui::SameLine();
+                ImGui::PopFont();
+            }
+            
+            ImGui::PopStyleColor(3);
+            ImGui::Columns(1);
+            ImGui::EndMainMenuBar();
+            ImGui::PopStyleVar(4);
         }
     };
 
@@ -356,6 +402,8 @@ public:
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         app = glfwCreateWindow(this->width, this->height, this->title, nullptr, nullptr);
+        this->window = app;
+        
 
         if(this->customTitleBar){
             disableTitlebar(app);
@@ -367,14 +415,15 @@ public:
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = NULL;
         (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;   // Enable Multi-Viewport / Platform Windows
         // io.ConfigViewportsNoAutoMerge = true;
-        // io.ConfigViewportsNoTaskBarIcon = true;
-
+        io.ConfigViewportsNoTaskBarIcon = true;
+        
         // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
         ImGuiStyle &style = ImGui::GetStyle();
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -385,9 +434,6 @@ public:
         // Setup Platform/Renderer backends
         ImGui_ImplGlfw_InitForOpenGL(app, true);
         ImGui_ImplOpenGL3_Init();
-
-        ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
         if (glewInit() != GLEW_OK)
         {
             std::cout << "Failed to init glew\n";
@@ -409,6 +455,22 @@ public:
 
         int display_w, display_h;
         glfwGetWindowPos(app, &display_w, &display_h);
+        
+        // Setup Dear ImGui style
+        this->PoppinsFontText =  io.Fonts->AddFontFromMemoryTTF(PoppinsFont,sizeof(PoppinsFont),15.0f);
+        // io.Fonts->Build();
+        // Load font from material design
+        float baseFontSize = 20.0f; // 13.0f is the size of the default font. Change to the font size you use.
+
+        // merge in icons from Material Design
+        static const ImWchar icons_ranges[] = { ICON_MIN_MD, ICON_MAX_16_MD, 0 };
+        ImFontConfig icons_config; 
+        icons_config.MergeMode = true;
+        icons_config.OversampleH = 3;
+        icons_config.OversampleV = 3;
+        icons_config.PixelSnapH = true; 
+        this->MaterialDesignFontIcon = io.Fonts->AddFontFromMemoryTTF( MaterialDesignIcon,sizeof(MaterialDesignIcon), baseFontSize, &icons_config, icons_ranges );
+        io.Fonts->Build();
 
         std::function<void()> menuBarHandler[3];
         menuBarHandler[0] = [&]()->void{
@@ -422,17 +484,17 @@ public:
             exit(EXIT_SUCCESS);
         };
 
-        Texture menuBarIcon[3];
-        menuBarIcon[0].Load<GL_CLAMP_TO_BORDER>(MinimizeIcon,1,sizeof(MinimizeIcon)/sizeof(char));
-        menuBarIcon[1].Load<GL_CLAMP_TO_BORDER>(MaximizeIcon,0,sizeof(MaximizeIcon)/sizeof(char));
-        menuBarIcon[2].Load<GL_CLAMP_TO_BORDER>(ExitIcon,2,sizeof(ExitIcon)/sizeof(char));
-        // Setup Dear ImGui style
+        // use this if you want to use custom image as a menubar icon
+        // Texture menuBarIcon[3];
+        // menuBarIcon[0].Load<GL_CLAMP_TO_BORDER>(MinimizeIcon,1,sizeof(MinimizeIcon)/sizeof(char));
+        // menuBarIcon[1].Load<GL_CLAMP_TO_BORDER>(MaximizeIcon,0,sizeof(MaximizeIcon)/sizeof(char));
+        // menuBarIcon[2].Load<GL_CLAMP_TO_BORDER>(ExitIcon,2,sizeof(ExitIcon)/sizeof(char));
+
+        // default menubar icon using google material design icon
+        std::string menuBarIcon[3] = {ICON_MD_REMOVE,ICON_MD_FULLSCREEN,ICON_MD_CLOSE};
         this->OnSetup(io);
-
-
         while (!glfwWindowShouldClose(app))
         {
-            glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
             glClear(GL_COLOR_BUFFER_BIT);
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
@@ -441,13 +503,12 @@ public:
                 if(this->customTitleBar){
                     this->DrawTitleBar(menuBarIcon,menuBarHandler);
                 }
-                // ImGui::Begin("Test");
-                // ImGui::Image((void*)(intptr_t)img1.ID,ImVec2(200.0f,200.0f));
-                // ImGui::End();
-                this->RenderContent();
+                this->RenderContent(io);
             }
 
-            // ImGui::ShowDemoWindow();
+            if(this->showDemoWindow){
+                ImGui::ShowDemoWindow();
+            }
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
