@@ -206,8 +206,8 @@ static LRESULT CALLBACK WindowProcedure(HWND Window, UINT Message, WPARAM wParam
         {
             NCCALCSIZE_PARAMS *pParams = reinterpret_cast<NCCALCSIZE_PARAMS *>(lParam);
             pParams->rgrc[0].top += 0;
-            pParams->rgrc[0].right -= 0;
-            pParams->rgrc[0].bottom -= 0;
+            pParams->rgrc[0].right += 0;
+            pParams->rgrc[0].bottom += 0;
             pParams->rgrc[0].left += 0;
         }
         return 0;
@@ -234,6 +234,15 @@ static LRESULT CALLBACK WindowProcedure(HWND Window, UINT Message, WPARAM wParam
 }
 
 
+static void resize_callback(GLFWwindow* app, int width, int height){
+    // glViewport(0,0,width,height);
+    // glfwSwapBuffers(app);
+}
+std::function<void()> render;
+static void refresh_callback(GLFWwindow* app){
+    render();
+}
+
 class DApp
 {
 public:
@@ -253,6 +262,10 @@ public:
     const char* title = nullptr;
     GLFWwindow* window;
     ImFont* PoppinsFontText;
+    ImFont* PoppinsFontText20Px;
+    ImFont* PoppinsFontText25Px;
+    ImFont* PoppinsFontText30Px;
+    ImFont* PoppinsFontText40Px;
     ImFont* MaterialDesignFontIcon;
 
 private:
@@ -367,8 +380,13 @@ private:
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(1.0f, 1.0f, 1.0f, 0.3f));
             
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0,0});
             for (int i = 0; i < 3; i++)
             { 
+                ImGuiStyle& style = ImGui::GetStyle();
+                ImVec2 defaultButtonTextAlign = style.ButtonTextAlign;
+                ImVec2 fontSize = ImGui::CalcTextSize(menuBarIcon[i].c_str());
+                style.ButtonTextAlign = ImVec2(0.5f,0.5f + (fontSize.y/this->titleBarHeight)/2);
                 ImGui::PushFont(this->MaterialDesignFontIcon);
                 if(ImGui::Button(
                     menuBarIcon[i].c_str(),
@@ -376,6 +394,7 @@ private:
                 )){
                     menuBarHandler[i]();
                 };
+                style.ButtonTextAlign = defaultButtonTextAlign;
                 if (i < 2)
                     ImGui::SameLine();
                 ImGui::PopFont();
@@ -384,7 +403,7 @@ private:
             ImGui::PopStyleColor(3);
             ImGui::Columns(1);
             ImGui::EndMainMenuBar();
-            ImGui::PopStyleVar(4);
+            ImGui::PopStyleVar(5);
         }
     };
 
@@ -415,15 +434,17 @@ public:
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
-        io.IniFilename = NULL;
+        io.IniFilename = "App.ini";
         (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;   // Enable Multi-Viewport / Platform Windows
         // io.ConfigViewportsNoAutoMerge = true;
-        io.ConfigViewportsNoTaskBarIcon = true;
+        // io.ConfigViewportsNoTaskBarIcon = true;
         
+        glfwSetWindowRefreshCallback(this->window,refresh_callback);
+        glfwSetWindowSizeCallback(this->window, resize_callback);
         // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
         ImGuiStyle &style = ImGui::GetStyle();
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -456,8 +477,11 @@ public:
         int display_w, display_h;
         glfwGetWindowPos(app, &display_w, &display_h);
         
-        // Setup Dear ImGui style
-        this->PoppinsFontText =  io.Fonts->AddFontFromMemoryTTF(PoppinsFont,sizeof(PoppinsFont),15.0f);
+        this->PoppinsFontText = io.Fonts->AddFontFromMemoryTTF(PoppinsFont,sizeof(PoppinsFont),18.0f);
+        this->PoppinsFontText20Px = io.Fonts->AddFontFromMemoryTTF(PoppinsFont,sizeof(PoppinsFont),20.0f);
+        this->PoppinsFontText25Px = io.Fonts->AddFontFromMemoryTTF(PoppinsFont,sizeof(PoppinsFont),25.0f);
+        this->PoppinsFontText30Px = io.Fonts->AddFontFromMemoryTTF(PoppinsFont,sizeof(PoppinsFont),30.0f);
+        this->PoppinsFontText40Px = io.Fonts->AddFontFromMemoryTTF(PoppinsFont,sizeof(PoppinsFont),40.0f);
         // io.Fonts->Build();
         // Load font from material design
         float baseFontSize = 20.0f; // 13.0f is the size of the default font. Change to the font size you use.
@@ -470,14 +494,19 @@ public:
         icons_config.OversampleV = 3;
         icons_config.PixelSnapH = true; 
         this->MaterialDesignFontIcon = io.Fonts->AddFontFromMemoryTTF( MaterialDesignIcon,sizeof(MaterialDesignIcon), baseFontSize, &icons_config, icons_ranges );
-        io.Fonts->Build();
 
         std::function<void()> menuBarHandler[3];
         menuBarHandler[0] = [&]()->void{
             glfwIconifyWindow(app);
         };
+
+        // GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor();
+        // int x,y,w,h;
         menuBarHandler[1] = [&]()->void{
             glfwMaximizeWindow(app);
+            // glfwGetMonitorWorkarea(primaryMonitor,&x,&y,&w,&h);
+            // glfwSetWindowPos(this->window,0,0);
+            // glfwSetWindowSize(this->window,w,h);
         };
         menuBarHandler[2] = [&]()->void{
             glfwTerminate();
@@ -493,9 +522,8 @@ public:
         // default menubar icon using google material design icon
         std::string menuBarIcon[3] = {ICON_MD_REMOVE,ICON_MD_FULLSCREEN,ICON_MD_CLOSE};
         this->OnSetup(io);
-        while (!glfwWindowShouldClose(app))
-        {
-            glClear(GL_COLOR_BUFFER_BIT);
+
+        render = [&]()->void{
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
@@ -522,10 +550,44 @@ public:
                 ImGui::RenderPlatformWindowsDefault();
                 glfwMakeContextCurrent(backup_current_context);
             }
+
+            glfwSwapBuffers(app);
+        };
+
+        while (!glfwWindowShouldClose(app))
+        {
+            glClear(GL_COLOR_BUFFER_BIT);
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+            {
+                if(this->customTitleBar){
+                    this->DrawTitleBar(menuBarIcon,menuBarHandler);
+                }
+                this->RenderContent(io);
+            }
+
+            if(this->showDemoWindow){
+                ImGui::ShowDemoWindow();
+            }
+            
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+            // Update and Render additional Platform Windows
+            // (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.
+            //  For this specific demo app we could also call glfwMakeContextCurrent(window) directly)
+            if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+            {
+                GLFWwindow *backup_current_context = glfwGetCurrentContext();
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+                glfwMakeContextCurrent(backup_current_context);
+            }
+
             glfwSwapBuffers(app);
             glfwPollEvents();
         }
-
         glfwTerminate();
     };
 };
